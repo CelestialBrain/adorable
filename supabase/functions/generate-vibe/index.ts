@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -6,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 const systemPrompt = `You are a Senior Creative Technologist and full-stack prototype generator. Your job is to take a user's description and generate a complete, working HTML/CSS/JS prototype.
 
@@ -37,71 +36,82 @@ serve(async (req) => {
   try {
     const { prompt, history, type } = await req.json();
     
-    if (!GEMINI_API_KEY) {
-      console.error('GEMINI_API_KEY is not configured');
-      throw new Error('GEMINI_API_KEY is not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY is not configured');
+      throw new Error('LOVABLE_API_KEY is not configured');
     }
 
     console.log('Received request:', { type, promptLength: prompt?.length, historyLength: history?.length });
 
-    // Use different models for different tasks
-    const model = type === 'random' ? 'gemini-2.0-flash' : 'gemini-2.0-flash';
-    
     let messages;
     if (type === 'random') {
       messages = [
         {
+          role: 'system',
+          content: 'Generate a creative, unexpected web app idea in one sentence. Be creative and specific. Examples: "A playable Flappy Bird clone with neon graphics", "An interactive solar system explorer", "A recipe finder with drag-and-drop ingredients". Just respond with the idea, nothing else.'
+        },
+        {
           role: 'user',
-          parts: [{ text: 'Generate a creative, unexpected web app idea in one sentence. Be creative and specific. Examples: "A playable Flappy Bird clone with neon graphics", "An interactive solar system explorer", "A recipe finder with drag-and-drop ingredients". Just respond with the idea, nothing else.' }]
+          content: 'Give me a random creative web app idea.'
         }
       ];
     } else {
       const conversationHistory = history?.map((msg: { role: string; content: string }) => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
+        role: msg.role,
+        content: msg.content
       })) || [];
 
       messages = [
+        { role: 'system', content: systemPrompt },
         ...conversationHistory,
-        {
-          role: 'user',
-          parts: [{ text: prompt }]
-        }
+        { role: 'user', content: prompt }
       ];
     }
 
-    console.log('Calling Gemini API with model:', model);
+    console.log('Calling Lovable AI Gateway');
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: messages,
-        systemInstruction: type === 'random' ? undefined : { parts: [{ text: systemPrompt }] },
-        generationConfig: {
-          temperature: type === 'random' ? 1.2 : 0.7,
-          maxOutputTokens: type === 'random' ? 100 : 8192,
-          responseMimeType: type === 'random' ? 'text/plain' : 'application/json',
-        },
+        model: 'google/gemini-2.5-flash',
+        messages,
+        temperature: type === 'random' ? 1.2 : 0.7,
+        max_tokens: type === 'random' ? 100 : 8192,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
-      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+      console.error('Lovable AI Gateway error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Usage credits exhausted. Please add credits in Settings -> Workspace -> Usage.' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('Gemini API response received');
+    console.log('Lovable AI Gateway response received');
 
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = data.choices?.[0]?.message?.content;
     
     if (!content) {
-      console.error('No content in Gemini response:', JSON.stringify(data));
-      throw new Error('No content in Gemini response');
+      console.error('No content in response:', JSON.stringify(data));
+      throw new Error('No content in AI response');
     }
 
     if (type === 'random') {
@@ -115,13 +125,13 @@ serve(async (req) => {
     try {
       parsed = JSON.parse(content);
     } catch (e) {
-      console.error('Failed to parse Gemini response as JSON:', content);
+      console.error('Failed to parse response as JSON:', content);
       // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
       } else {
-        throw new Error('Invalid JSON response from Gemini');
+        throw new Error('Invalid JSON response from AI');
       }
     }
 
