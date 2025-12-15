@@ -24,3 +24,9 @@ export interface GenerationResult {
   response: string;
   pages: Page[];
 }
+
+export interface GenerateVibeResponse {
+  thought: string;
+  html: string;
+  title: string;
+}

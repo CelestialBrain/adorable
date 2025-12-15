@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { ChatPanel } from '@/components/ChatPanel';
 import { PreviewArea } from '@/components/PreviewArea';
 import { Message, Page } from '@/types';
-import { generateVibe, generateRandomIdea } from '@/services/mockGeminiService';
+import { generateVibe, generateRandomIdea } from '@/services/geminiService';
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -30,11 +30,19 @@ const Index = () => {
 
       const result = await generateVibe(content, history);
 
+      // Create page from result
+      const pageId = `page-${Date.now()}`;
+      const newPage = {
+        id: pageId,
+        title: result.title,
+        html: result.html,
+      };
+
       // Add assistant message
       const assistantMessage: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: result.response,
+        content: `Generated: ${result.title}`,
         thought: result.thought,
         timestamp: new Date(),
       };
@@ -42,22 +50,17 @@ const Index = () => {
 
       // Smart merge pages
       setPages((prevPages) => {
-        const newPages = [...prevPages];
-        for (const page of result.pages) {
-          const existingIndex = newPages.findIndex((p) => p.id === page.id);
-          if (existingIndex >= 0) {
-            newPages[existingIndex] = page;
-          } else {
-            newPages.push(page);
-          }
+        const existingIndex = prevPages.findIndex((p) => p.title === newPage.title);
+        if (existingIndex >= 0) {
+          const updated = [...prevPages];
+          updated[existingIndex] = newPage;
+          return updated;
         }
-        return newPages;
+        return [...prevPages, newPage];
       });
 
-      // Set active page to the first new page if none selected
-      if (result.pages.length > 0) {
-        setActivePageId(result.pages[0].id);
-      }
+      // Set active page
+      setActivePageId(pageId);
     } catch (error) {
       console.error('Error generating:', error);
       const errorMessage: Message = {
