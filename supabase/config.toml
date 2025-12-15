@@ -1,1 +1,4 @@
 project_id = "jwotaojnobhhnjaudthj"
+
+[functions.generate-vibe]
+verify_jwt = false
